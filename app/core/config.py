@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     jobs_path: Path = ROOT / "data" / "jobs.json"
     reports_dir: Path = ROOT / "data" / "reports"
     drafts_dir: Path = ROOT / "data" / "drafts"
+    # Local CA + server certificate made by scripts/serve_lan.py (HTTPS on
+    # the LAN, so a phone may use the microphone).
+    certs_dir: Path = ROOT / "certs"
 
     # USD per 1M tokens (Gemini Live, paid tier, ai.google.dev pricing
     # 2026-11). Only used to show an estimate in the UI.

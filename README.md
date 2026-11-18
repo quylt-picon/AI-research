@@ -18,7 +18,32 @@ uv run uvicorn app.main:app --reload --port 8100
 # mở http://localhost:8100  (Chrome khuyến nghị; cần quyền micro; localhost được coi là "secure")
 ```
 
-`uv run pytest` — 43 test, **không gọi Gemini** (Gemini được mock, giống cách approve-helper mock Typesense/LLM).
+`uv run pytest` — 48 test, **không gọi Gemini** (Gemini được mock, giống cách approve-helper mock Typesense/LLM).
+
+## Dùng trên điện thoại
+
+Trình duyệt chỉ cho dùng micro trên `https://` hoặc `localhost`. Mở `http://192.168.x.x:8100` trên điện thoại vẫn thấy trang, nhưng không gọi được (màn hình sẽ báo đỏ). Cần chạy HTTPS trong mạng LAN:
+
+```bash
+uv run python scripts/serve_lan.py            # in ra địa chỉ https://<IP>:8100 cho điện thoại
+uv run python scripts/serve_lan.py --port 8443 --ip 192.168.1.20   # đổi cổng / IP nếu cần
+```
+
+Lần chạy đầu, script tạo một CA cục bộ trong `certs/` (đã gitignore). Mỗi lần chạy, nó cấp lại chứng chỉ server cho IP LAN hiện tại, nên khi đổi Wi-Fi/IP chỉ cần chạy lại, không phải cài lại gì trên điện thoại.
+
+Cài CA lên điện thoại (một lần):
+
+| Máy | Cách làm |
+|---|---|
+| iPhone (Safari) | Mở `https://<IP>:8100/ca.crt` (bỏ qua cảnh báo) → Cho phép tải hồ sơ → Cài đặt > Cài đặt chung > VPN & Quản lý thiết bị > cài hồ sơ → Cài đặt chung > Giới thiệu > Cài đặt tin cậy chứng nhận > bật. **Bắt buộc**: nếu không cài, Safari sẽ chặn WebSocket và cuộc gọi không kết nối được (app sẽ hiện link tải chứng chỉ). |
+| Android (Chrome) | Thường chỉ cần bấm "Nâng cao → Tiếp tục" ở trang cảnh báo. Nếu vẫn không kết nối được, hoặc muốn hết cảnh báo: tải `/ca.crt`, rồi vào Cài đặt > Bảo mật > Mã hóa và thông tin xác thực > Cài đặt chứng chỉ > Chứng chỉ CA. |
+
+Lưu ý:
+- `certs/ca.key` là khóa của CA mà điện thoại tin tưởng, không chia sẻ và không commit file này. Xong demo nên gỡ hồ sơ khỏi điện thoại.
+- App không có đăng nhập, nên ai cùng mạng cũng mở được trang và gọi Gemini (tốn phí). Chỉ chạy ở mạng tin cậy.
+- Nếu macOS hỏi có cho Python nhận kết nối không, chọn Allow.
+
+Trên điện thoại: danh sách và chi tiết là hai màn hình riêng (nút ← hoặc cử chỉ Back để quay lại). Khi gọi, nút điều khiển nằm cố định ở đáy màn hình, 会話/報告書 chuyển bằng tab, và màn hình không tự tắt trong lúc gọi (Wake Lock).
 
 ## 3 màn hình
 
@@ -120,3 +145,11 @@ Giới hạn mặc định: 8 lượt thợ, 150 giây (lần chạy ngày 17/11
 - Chưa nhận ảnh qua camera (Live API hỗ trợ, nhưng phiên audio+video chỉ 2 phút).
 - Chưa dùng session resumption của Live API; mất mạng thì kết thúc cuộc gọi và lưu nháp, gọi lại sẽ tiếp tục.
 - Tiếng ồn hiện trường: nên dùng tai nghe; echo cancellation của trình duyệt đã bật.
+
+
+
+# Run app
+
+```bash
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8100
+```

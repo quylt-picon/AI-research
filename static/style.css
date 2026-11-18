@@ -103,7 +103,6 @@ code { background: var(--agent-bg); padding: 1px 5px; border-radius: 4px; font-s
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 10px 12px; margin-bottom: 8px; cursor: pointer;
 }
-.jobcard:hover { border-color: var(--primary); }
 .jobcard.active { border-color: var(--primary); box-shadow: 0 0 0 2px var(--info-bg); }
 .jobcard .top { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); }
 .jobcard .name { font-weight: 600; margin: 2px 0; }
@@ -122,13 +121,21 @@ code { background: var(--agent-bg); padding: 1px 5px; border-radius: 4px; font-s
 .desc { margin: 8px 0 0; padding: 8px 12px; border-left: 3px solid var(--line); background: var(--surface); border-radius: 0 8px 8px 0; font-size: 14px; }
 .resume { background: var(--warn-bg); color: var(--warn); padding: 8px 10px; border-radius: 8px; margin-bottom: 10px; font-size: 13.5px; }
 .resume strong { color: inherit; }
+.micwarn { background: var(--alert-bg); color: var(--alert); padding: 8px 10px; border-radius: 8px; margin-bottom: 10px; font-size: 13.5px; }
+.micwarn code { background: transparent; padding: 0; }
+.back { display: none; } /* phone only */
 
 /* ---------- buttons ---------- */
 .btn {
   font: inherit; border: 1px solid var(--line); background: var(--surface); color: var(--text);
   padding: 7px 14px; border-radius: 8px; cursor: pointer;
 }
-.btn:hover { border-color: var(--primary); }
+button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+/* hover only where there is a mouse: on touch it sticks after a tap */
+@media (hover: hover) {
+  .btn:hover:not(:disabled), .jobcard:hover { border-color: var(--primary); }
+}
+.btn:active:not(:disabled), .jobcard:active, .tab:active, .panetab:active { filter: brightness(.94); }
 .btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); font-weight: 600; }
 .btn.big { padding: 12px 22px; font-size: 16px; }
 .btn.small { padding: 4px 10px; font-size: 13px; }
@@ -155,6 +162,7 @@ label { display: flex; flex-direction: column; font-size: 12px; color: var(--mut
 .meter { width: 80px; height: 6px; background: var(--agent-bg); border-radius: 3px; overflow: hidden; }
 .meter span { display: block; height: 100%; width: 0; background: var(--ok); transition: width .08s; }
 .timer, .cost { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--muted); }
+.callbar .break, .panetabs { display: none; } /* phone only */
 .typebox { display: flex; gap: 8px; margin: 8px 0 14px; }
 .typebox input { flex: 1; min-width: 0; }
 
@@ -215,13 +223,82 @@ details summary { cursor: pointer; font-weight: 600; margin: 4px 0; }
 .msg-err { color: var(--alert); margin-top: 8px; white-space: pre-wrap; }
 
 /* ---------- phone (kept last so it overrides the rules above) ---------- */
+/* Same breakpoint as PHONE in app.js. */
 @media (max-width: 860px) {
-  .view { grid-template-columns: 1fr; padding: 12px 16px; }
-  .model { margin-left: 0; width: 100%; }
-  .topbar { position: static; }
-  .incall { top: 0; }
-  /* keep the job list short so the selected job is reachable */
-  .jobcard { padding: 7px 10px; margin-bottom: 6px; }
-  .jobcard .snippet { display: none; }
+  /* header: brand + key warning, then the tabs full width */
+  .topbar {
+    position: static; gap: 6px 10px;
+    padding: calc(8px + env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
+  }
+  .sub, .model .mname { display: none; }
+  .logo { font-size: 20px; }
+  .model { margin-left: auto; }
+  .tabs { order: 3; width: 100%; }
+  .tab { flex: 1; min-height: 44px; justify-content: center; }
+
+  .view {
+    grid-template-columns: 1fr; gap: 0;
+    padding: 12px max(12px, env(safe-area-inset-right)) calc(16px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  }
+  /* list ⇄ detail: one screen at a time (app.js toggles .has-detail) */
+  .view:not(.single):not(.has-detail) > .jobpane,
+  .view.has-detail > .joblist { display: none; }
+  .back { display: inline-flex; align-items: center; margin: 0 0 10px; }
+  .calling .back { display: none; }
+  .jobcard { padding: 12px 14px; margin-bottom: 10px; }
+  .jobcard .name { font-size: 16px; }
+
+  /* touch targets ≥ 44px; 16px text in fields, or iOS zooms in on focus */
+  .btn { min-height: 44px; }
+  .btn.small { min-height: 40px; padding: 6px 12px; font-size: 14px; }
+  select, input[type=text] { font-size: 16px; min-height: 44px; }
+  .row select { flex: 1 1 auto; min-width: 0; }
+  .card { padding: 12px 14px; }
+
+  /* before the call: one column, a big start button */
+  .startrow { flex-direction: column; align-items: stretch; }
+  .startrow select { width: 100%; }
+  .btn.big { width: 100%; min-height: 56px; font-size: 17px; }
+
+  /* during the call: controls docked at the bottom, like a phone call */
+  .incall { position: static; }
+  .jobpane.calling { padding-bottom: var(--dock-h, 170px); }
+  .calling .incall {
+    position: fixed; left: 0; right: 0; bottom: 0; top: auto; z-index: 20;
+    background: var(--surface); border-top: 1px solid var(--line); box-shadow: 0 -4px 16px rgba(0, 0, 0, .08);
+    padding: 10px max(12px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  }
+  .calling .callbar { border: 0; border-radius: 0; padding: 0; gap: 8px; background: none; }
+  .callbar .break { display: block; flex-basis: 100%; height: 0; }
+  .calling .callbar .mute, .calling .callbar .stop { flex: 1; min-height: 50px; font-size: 16px; }
+  .calling .callbar .stop:not(:disabled) { background: var(--alert); border-color: var(--alert); color: #fff; font-weight: 600; }
+  .meter { width: 56px; }
+  .calling .typebox { margin: 8px 0 0; }
+  .typebox .btn { min-width: 64px; }
+
+  /* conversation | report as two tabs (app.js sets .grid2[data-show]) */
+  .panetabs {
+    display: flex; gap: 6px; position: sticky; top: 0; z-index: 3;
+    background: var(--bg); padding: 6px 0 8px; margin-top: -6px;
+  }
+  .panetab {
+    flex: 1; min-height: 40px; font: inherit; font-size: 14px; cursor: pointer;
+    color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 99px;
+  }
+  .panetab.active { color: var(--info); background: var(--info-bg); border-color: transparent; font-weight: 600; }
+  .panetab.has-update::after {
+    content: ""; display: inline-block; width: 8px; height: 8px; margin-left: 5px;
+    border-radius: 50%; background: var(--primary); vertical-align: middle;
+  }
+  .pt-count { font-variant-numeric: tabular-nums; font-weight: 400; }
+  .grid2[data-show=transcript] > .checklist-card,
+  .grid2[data-show=checklist] > .transcript-card { display: none; }
   .transcript { max-height: none; }
+  .bubble { max-width: 92%; }
+
+  /* approver: report fields as stacked rows instead of a cramped 3-column table */
+  table.stack thead { display: none; }
+  table.stack tr { display: block; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  table.stack td { display: block; border: 0; padding: 0; }
+  table.stack td:first-child { font-size: 12px; font-weight: 600; color: var(--muted); }
 }

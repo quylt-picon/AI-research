@@ -2,12 +2,17 @@
 
     uv run uvicorn app.main:app --reload --port 8100
     open http://localhost:8100
+
+From a phone on the same network (HTTPS, needed for the microphone):
+
+    uv run python scripts/serve_lan.py
 """
 
 import logging
+import ssl
 
 from fastapi import FastAPI, HTTPException, WebSocket
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app.core.config import ROOT, settings
@@ -42,6 +47,23 @@ def _draft_for(job: dict) -> ReportDraft:
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(STATIC / "index.html")
+
+
+@app.get("/ca.crt")
+def ca_certificate() -> Response:
+    """The local CA from scripts/serve_lan.py, to install on a phone once.
+
+    Only the public certificate, as DER (what iOS and Android install from a
+    download). The CA key stays in certs/ and is never served.
+    """
+    path = settings.certs_dir / "ca.crt"
+    if not path.is_file():
+        raise HTTPException(404, "No local CA yet: start the server with scripts/serve_lan.py")
+    return Response(
+        ssl.PEM_cert_to_DER_cert(path.read_text()),
+        media_type="application/x-x509-ca-cert",
+        headers={"Content-Disposition": 'attachment; filename="worker-report-live-ca.crt"'},
+    )
 
 
 @app.get("/api/config")

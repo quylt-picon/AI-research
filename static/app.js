@@ -30,19 +30,66 @@ const JOB_STATUS = { open: "未報告", draft: "途中保存", reported: "報告
 const COMPLETENESS = { complete: "全項目あり", complete_with_exemptions: "免除あり" };
 const GROUP_JA = { material: "材料費", labor: "作業費", support: "諸経費・付帯費", adjustment: "調整費" };
 
+// Same breakpoint as the phone rules at the end of style.css.
+const PHONE = matchMedia("(max-width: 860px)");
+// Every browser on iOS is WebKit (Chrome there says "CriOS", not "Chrome").
+const IS_WEBKIT = /AppleWebKit/.test(navigator.userAgent) && !/Chrome|Chromium|Android/.test(navigator.userAgent);
+// The mic and AudioWorklet exist only on https:// or localhost.
+const micAvailable = () => window.isSecureContext && !!navigator.mediaDevices?.getUserMedia && "AudioWorkletNode" in window;
+
 let CONFIG = {};
 
 // ------------------------------------------------------------------ tabs
 // URL hash: #worker, #worker/J-1001, #approver, #approver/<report_id>, #rules
+function parseHash() {
+  const [view, id] = location.hash.slice(1).split("/");
+  return [["worker", "approver", "rules"].includes(view) ? view : "worker", id && decodeURIComponent(id)];
+}
+
 function showView(view, id) {
   $$(".tab").forEach((x) => x.classList.toggle("active", x.dataset.view === view));
   $$(".view").forEach((v) => v.classList.toggle("hidden", v.id !== `view-${view}`));
-  history.replaceState(null, "", `#${view}${id ? "/" + id : ""}`);
+  // Phone: a tab (or Back) without an id shows that tab's list. A running call keeps its screen.
+  const inCall = view === "worker" && call;
+  if (!id && !inCall) $(`#view-${view}`).classList.remove("has-detail");
+  history.replaceState(null, "", `#${view}${id ? "/" + id : inCall ? "/" + call.job.job_id : ""}`);
   if (view === "approver") return loadReports().then(() => id && openReport(id));
   if (view === "rules") return loadRules();
   return loadJobs(id);
 }
 $$(".tab").forEach((t) => t.addEventListener("click", () => showView(t.dataset.view)));
+
+// ------------------------------------------------------------------ phone: list ⇄ detail
+// On a phone the list and the selected item are separate screens (CSS: .has-detail).
+// Opening an item from the list adds a history entry, so the system Back gesture returns to the list.
+let detailPushed = false;
+
+function pushDetail() {
+  if (!PHONE.matches) return;
+  history.pushState(null, "", location.hash);
+  detailPushed = true;
+}
+
+function showDetail(view) {
+  $(`#view-${view}`).classList.add("has-detail");
+  if (PHONE.matches) scrollTo(0, 0);
+}
+
+function backToList(view) {
+  if (detailPushed) history.back(); // → popstate
+  else showView(view);
+}
+
+addEventListener("popstate", () => {
+  detailPushed = false;
+  if (call) { // the call keeps its screen; 終了 is the way out
+    history.pushState(null, "", `#worker/${call.job.job_id}`);
+    detailPushed = true;
+    call.sysline("通話中です。戻るには「終了」で通話を終えてください。");
+    return;
+  }
+  showView(...parseHash());
+});
 
 // ------------------------------------------------------------------ worker
 let selectedJob = null;
@@ -57,15 +104,40 @@ async function loadJobs(wantId) {
     ...jobs.map((j) =>
       el("button", {
         class: `jobcard ${selectedJob?.job_id === j.job_id ? "active" : ""}`,
-        onclick: () => { if (!call) selectJob(j); },
+        onclick: () => { if (!call) { pushDetail(); selectJob(j); } },
       },
         el("div", { class: "top" }, el("span", {}, `${j.large}／${j.small}`), el("span", { class: `badge ${j.status}` }, JOB_STATUS[j.status])),
         el("div", { class: "name" }, j.store_name),
         el("div", { class: "snippet" }, j.description))
     )
   );
-  if (!selectedJob && jobs.length) await selectJob(wanted || jobs.find((j) => j.status !== "reported") || jobs[0]);
+  // A phone starts on the list; a desktop opens the first open job next to it.
+  if (!selectedJob && jobs.length && (wanted || !PHONE.matches)) {
+    await selectJob(wanted || jobs.find((j) => j.status !== "reported") || jobs[0]);
+  }
   return jobs;
+}
+
+function micHelp() {
+  return [
+    el("strong", {}, "このままではマイクを使えません。"),
+    " マイクは https:// のページでしか使えません。管理者が ", el("code", {}, "scripts/serve_lan.py"),
+    " で起動したときに表示される https:// のアドレスを開いてください。",
+    el("div", { class: "vi" }, "Trình duyệt chỉ cho dùng micro trên https:// hoặc localhost. Chạy server bằng scripts/serve_lan.py rồi mở địa chỉ https:// nó in ra."),
+  ];
+}
+
+// Phone only: the transcript and the checklist share the screen as two tabs.
+function setPaneTab(pane, which) {
+  $(".grid2", pane).dataset.show = which;
+  $$(".panetab", pane).forEach((b) => b.classList.toggle("active", b.dataset.show === which));
+  if (which === "checklist") $(".panetab[data-show=checklist]", pane).classList.remove("has-update");
+  if (!PHONE.matches) return;
+  const root = document.scrollingElement;
+  if (which === "transcript" && call?.pane === pane) { root.scrollTop = root.scrollHeight; return; } // newest line
+  // Otherwise start the other tab at its top, not mid-way down where the previous one was.
+  const top = $(".grid2", pane).getBoundingClientRect().top + scrollY - $(".panetabs", pane).offsetHeight;
+  if (scrollY > top) scrollTo(0, top);
 }
 
 async function selectJob(job) {
@@ -74,6 +146,15 @@ async function selectJob(job) {
   $$("#jobs .jobcard").forEach((c) => c.classList.toggle("active", c.querySelector(".name").textContent === job.store_name));
   const pane = $("#jobPane");
   pane.replaceChildren($("#tpl-call").content.cloneNode(true));
+  pane.classList.remove("calling");
+  showDetail("worker");
+  $(".back", pane).onclick = () => backToList("worker");
+  $$(".panetab", pane).forEach((b) => (b.onclick = () => setPaneTab(pane, b.dataset.show)));
+  setPaneTab(pane, "checklist");
+  if (!micAvailable()) {
+    $(".micwarn", pane).classList.remove("hidden");
+    $(".micwarn", pane).replaceChildren(...micHelp());
+  }
   $(".issue", pane).textContent = `${job.large}／${job.small}　#${job.trouble_number}`;
   $(".store", pane).textContent = job.store_name;
   $(".meta", pane).textContent = `訪問日 ${job.visit_date}　作業者 ${job.worker.name}さん　依頼 ${fmtDate(job.requested_at)}`;
@@ -95,6 +176,7 @@ async function selectJob(job) {
   if (job.status === "reported") {
     $(".precall", pane).classList.add("hidden");
     $(".grid2", pane).classList.add("hidden"); // the report itself is on the approver screen
+    $(".panetabs", pane).classList.add("hidden");
     showDone(pane, job.report_id);
     return;
   }
@@ -105,9 +187,11 @@ function renderState(pane, state, flash) {
   const cl = state.checklist;
   $(".progress span", pane).style.width = `${cl.total ? (100 * (cl.done + cl.waived.length)) / cl.total : 0}%`;
   $(".progress-text", pane).textContent = cl.status === "ready" ? "✓ すべて揃いました" : `${cl.done + cl.waived.length} / ${cl.total}`;
+  $(".pt-count", pane).textContent = `${cl.done + cl.waived.length}/${cl.total}`;
 
   const list = $(".checklist", pane);
   const before = new Map($$("li", list).map((li) => [li.dataset.key, li.dataset.sig]));
+  let changed = false;
   list.replaceChildren(
     ...state.fields.map((f) => {
       const sig = `${f.status}|${f.value}`;
@@ -122,10 +206,12 @@ function renderState(pane, state, flash) {
           f.status !== "ok" && f.status !== "waived" && f.issue && f.issue !== "未入力" && el("div", { class: "issue" }, f.issue),
           f.status === "missing" && f.issue === "未入力" && el("div", { class: "issue" }, "未入力"))
       );
-      if (flash && before.has(f.key) && before.get(f.key) !== sig) li.classList.add("flash");
+      if (flash && before.has(f.key) && before.get(f.key) !== sig) { li.classList.add("flash"); changed = true; }
       return li;
     })
   );
+  // Phone: a dot on the 報告書 tab while the worker is looking at the conversation.
+  if (changed && $(".grid2", pane).dataset.show !== "checklist") $(".panetab[data-show=checklist]", pane).classList.add("has-update");
 
   const costs = $(".costs", pane);
   const rows = state.cost_items.map((i) =>
@@ -173,17 +259,28 @@ class Call {
   }
 
   async start() {
-    // Both contexts are made before any await, while the click still counts as a user gesture.
+    this.keepAwake();
+    // Contexts are made before any await, while the tap still counts as a user gesture
+    // (iOS only unlocks audio inside one, so the playback context is resumed right away too).
     this.ctx = new AudioContext(); // playback (24 kHz buffers are resampled by the browser)
+    this.ctx.resume().catch(() => {});
+    // Safari 16.4+: tell iOS this page plays and records at the same time.
+    try { if (navigator.audioSession) navigator.audioSession.type = "play-and-record"; } catch {}
+    // Capture at 16 kHz so the browser does a proper resample; the worklet then
+    // passes samples through. Fallback: the mic shares the playback context and the
+    // worklet downsamples. Used on WebKit (Safari, every iOS browser), which has had
+    // bugs with a mic in a context whose rate differs from the device, and when a
+    // browser (Firefox) refuses such a mic source.
     let micCtx = null;
-    try { micCtx = new AudioContext({ sampleRate: 16000 }); } catch { micCtx = null; }
+    if (!IS_WEBKIT) {
+      try { micCtx = new AudioContext({ sampleRate: 16000 }); } catch { micCtx = null; }
+    }
     this.stream = await navigator.mediaDevices.getUserMedia({
       audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
     });
-    // Capture at 16 kHz so the browser does a proper resample; the worklet then
-    // passes samples through. Some browsers (Firefox) refuse a mic source in a
-    // context whose rate differs from the device — fall back to the playback
-    // context and let the worklet downsample.
+    this.stream.getAudioTracks()[0]?.addEventListener("ended", () => {
+      if (!this.cleaned) this.sysline("マイクが停止しました。「終了」して、もう一度かけ直してください（続きから再開します）。", true);
+    });
     let src = null;
     if (micCtx) {
       try { src = micCtx.createMediaStreamSource(this.stream); } catch { micCtx.close(); micCtx = null; }
@@ -205,9 +302,33 @@ class Call {
     const proto = location.protocol === "https:" ? "wss" : "ws";
     this.ws = new WebSocket(`${proto}://${location.host}/ws/report/${this.job.job_id}?lang=${this.lang}`);
     this.ws.binaryType = "arraybuffer";
-    this.ws.onmessage = (e) => (typeof e.data === "string" ? this.onEvent(JSON.parse(e.data)) : this.play(e.data));
-    this.ws.onclose = () => this.cleanup();
+    this.ws.onmessage = (e) => {
+      this.heard = true;
+      typeof e.data === "string" ? this.onEvent(JSON.parse(e.data)) : this.play(e.data);
+    };
+    this.ws.onclose = () => {
+      // The server always sends something first (status or error), so silence means we never got through.
+      if (!this.heard) this.sysline(connectHelp(), true);
+      this.cleanup();
+    };
     this.timer = setInterval(() => this.tick(), 250);
+  }
+
+  // Keep the screen on: a phone that locks suspends the page and the call drops.
+  keepAwake() {
+    if (!navigator.wakeLock || document.visibilityState !== "visible") return;
+    navigator.wakeLock.request("screen").then(
+      (lock) => (this.cleaned ? lock.release() : (this.wakeLock = lock)),
+      () => {});
+  }
+
+  // iOS suspends audio while the page is hidden or a phone call comes in; resume when we can.
+  wake() {
+    if (this.cleaned) return;
+    for (const c of new Set([this.ctx, this.micCtx])) {
+      if (c && c.state !== "running" && c.state !== "closed") c.resume().catch(() => {});
+    }
+    if (!this.wakeLock || this.wakeLock.released) this.keepAwake();
   }
 
   tick() {
@@ -246,19 +367,19 @@ class Call {
 
   transcript(role, delta) {
     const box = $(".transcript", this.pane);
-    if (!this.lastBubble || this.lastBubble.dataset.role !== role) {
-      this.lastBubble = el("div", { class: `bubble ${role}`, "data-role": role },
-        el("span", { class: "who" }, role === "agent" ? "オペレーター" : "あなた"), el("span", { class: "t" }));
-      box.append(this.lastBubble);
-    }
-    $(".t", this.lastBubble).textContent += delta;
-    box.scrollTop = box.scrollHeight;
+    appendFollow(box, () => {
+      if (!this.lastBubble || this.lastBubble.dataset.role !== role) {
+        this.lastBubble = el("div", { class: `bubble ${role}`, "data-role": role },
+          el("span", { class: "who" }, role === "agent" ? "オペレーター" : "あなた"), el("span", { class: "t" }));
+        box.append(this.lastBubble);
+      }
+      $(".t", this.lastBubble).textContent += delta;
+    });
   }
 
   sysline(text, err) {
     const box = $(".transcript", this.pane);
-    box.append(el("div", { class: `sysline ${err ? "err" : ""}` }, text));
-    box.scrollTop = box.scrollHeight;
+    appendFollow(box, () => box.append(el("div", { class: `sysline ${err ? "err" : ""}` }, text)));
     this.lastBubble = null;
   }
 
@@ -345,6 +466,10 @@ class Call {
     if (this.cleaned) return;
     this.cleaned = true;
     clearInterval(this.timer);
+    this.wakeLock?.release().catch(() => {});
+    dockObserver.disconnect();
+    this.pane.classList.remove("calling");
+    $(".incall", this.pane).style.transform = "";
     this.stream?.getTracks().forEach((t) => t.stop());
     // Let the closing words finish playing before closing audio.
     const wait = Math.max(0, (this.nextTime - (this.ctx?.currentTime || 0)) * 1000) + 300;
@@ -370,14 +495,61 @@ class Call {
   }
 }
 
+// Keep the newest line in view unless the reader has scrolled up. On a phone the page itself scrolls.
+function appendFollow(box, add) {
+  const page = PHONE.matches;
+  const root = document.scrollingElement;
+  const atEnd = page
+    ? root.scrollTop + innerHeight >= root.scrollHeight - 120
+    : box.scrollTop + box.clientHeight >= box.scrollHeight - 60;
+  add();
+  if (!atEnd || !box.offsetParent) return; // scrolled up, or the 報告書 tab is showing
+  if (page) root.scrollTop = root.scrollHeight;
+  else box.scrollTop = box.scrollHeight;
+}
+
+function connectHelp() {
+  if (location.protocol !== "https:") return "サーバーに接続できませんでした。";
+  return [
+    "サーバーに接続できませんでした。iPhone では最初に証明書のインストールが必要です：",
+    el("a", { href: "/ca.crt" }, "証明書をダウンロード"),
+    "（設定 > 一般 > VPNとデバイス管理 でインストール → 設定 > 一般 > 情報 > 証明書信頼設定 でオン）",
+  ];
+}
+
+// ------------------------------------------------------------------ phone: call dock
+// During a call on a phone the controls are fixed to the bottom (CSS: .calling .incall).
+// The pane is padded by the dock's height, and the dock rides above the iOS keyboard.
+const dockObserver = new ResizeObserver(([e]) => {
+  e.target.closest(".jobpane")?.style.setProperty("--dock-h", `${e.target.offsetHeight}px`);
+});
+
+function placeDock() {
+  const dock = call && $(".incall", call.pane);
+  const vv = window.visualViewport;
+  if (!dock || !vv) return;
+  // iOS keeps the layout viewport when the keyboard opens: lift the dock by what the keyboard covers.
+  // (Android Chrome resizes the page instead — interactive-widget in index.html — so this stays 0.)
+  const covered = PHONE.matches && vv.scale < 1.01 ? innerHeight - vv.height - vv.offsetTop : 0;
+  dock.style.transform = covered > 1 ? `translateY(${-covered}px)` : "";
+}
+window.visualViewport?.addEventListener("resize", placeDock);
+window.visualViewport?.addEventListener("scroll", placeDock);
+document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && call?.wake());
+document.addEventListener("pointerdown", () => call?.wake()); // a tap is a gesture iOS accepts for resuming audio
+
 async function startCall(pane, job, lang) {
   if (call) return;
   if (!CONFIG.api_key_configured) { alert("GEMINI_API_KEY が .env に設定されていません"); return; }
+  if (!micAvailable()) { alert("マイクは https:// のページでしか使えません。画面の案内を確認してください。"); return; }
   $(".precall", pane).classList.add("hidden");
   $(".incall", pane).classList.remove("hidden");
   $(".typebox", pane).classList.remove("hidden");
   $(".stop", pane).disabled = false;
   $(".mute", pane).disabled = false;
+  pane.classList.add("calling");
+  dockObserver.observe($(".incall", pane));
+  setPaneTab(pane, "transcript");
   call = new Call(pane, job, lang);
   $(".stop", pane).onclick = () => call?.stop();
   $(".mute", pane).onclick = () => call?.toggleMute();
@@ -402,7 +574,7 @@ async function loadReports() {
   if (!reports.length) { box.replaceChildren(el("div", { class: "muted small" }, "まだ報告はありません。")); return; }
   box.replaceChildren(
     ...reports.map((r) =>
-      el("button", { class: "jobcard", "data-id": r.report_id, onclick: () => openReport(r.report_id) },
+      el("button", { class: "jobcard", "data-id": r.report_id, onclick: () => { pushDetail(); openReport(r.report_id); } },
         el("div", { class: "top" }, el("span", {}, `${r.job.large}／${r.job.small}`),
           el("span", { class: `badge ${r.completeness}` }, COMPLETENESS[r.completeness])),
         el("div", { class: "name" }, r.job.store_name),
@@ -416,7 +588,9 @@ async function openReport(id) {
   const r = await api(`/api/reports/${encodeURIComponent(id)}`);
   const q = r.qnavi_fields;
   const conv = r.conversation || {};
+  showDetail("approver");
   $("#reportPane").replaceChildren(
+    el("button", { type: "button", class: "btn ghost small back", onclick: () => backToList("approver") }, "← 報告一覧"),
     el("div", { class: "jobhead" },
       el("div", { class: "issue" }, `${r.job.large}／${r.job.small}　#${r.job.trouble_number}`),
       el("h2", {}, r.job.store_name, " ", el("span", { class: `badge ${r.completeness}` }, COMPLETENESS[r.completeness])),
@@ -433,7 +607,7 @@ async function openReport(id) {
         el("div", { class: "col" }, el("div", { class: "k" }, k), el("div", { class: "v" }, q[k] || "—"))))),
 
     el("section", { class: "card" }, el("h3", {}, "報告項目"),
-      el("div", { class: "tablewrap" }, el("table", {},
+      el("div", { class: "tablewrap" }, el("table", { class: "stack" },
         el("thead", {}, el("tr", {}, el("th", {}, "項目"), el("th", {}, "内容"), el("th", {}, "区分"))),
         el("tbody", {}, r.fields.map((f) => el("tr", {}, el("td", {}, f.label), el("td", {}, f.display), el("td", { class: "muted small" }, f.source))))))),
 
@@ -490,9 +664,8 @@ $("#showPrompt").onclick = async () => {
 // ------------------------------------------------------------------ boot
 (async () => {
   CONFIG = await api("/api/config");
-  $("#modelBadge").replaceChildren(
-    el("span", {}, `model: ${CONFIG.model}`, !CONFIG.api_key_configured && el("span", { class: "warn" }, "　APIキー未設定"))
-  );
-  const [view, id] = location.hash.slice(1).split("/");
-  showView(["worker", "approver", "rules"].includes(view) ? view : "worker", id && decodeURIComponent(id));
+  $("#modelBadge").replaceChildren(el("span", {},
+    el("span", { class: "mname" }, `model: ${CONFIG.model}`),
+    !CONFIG.api_key_configured && el("span", { class: "warn" }, "　APIキー未設定")));
+  showView(...parseHash());
 })();

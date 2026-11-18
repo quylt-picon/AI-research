@@ -2,7 +2,11 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- viewport-fit: draw under the notch/home bar (padded with safe-area insets);
+       interactive-widget: Android Chrome shrinks the page for the keyboard, so the call dock stays above it -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1a1f26" media="(prefers-color-scheme: dark)">
   <title>作業報告アシスタント</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -75,6 +79,7 @@
   </main>
 
   <template id="tpl-call">
+    <button type="button" class="btn ghost small back">← 案件一覧</button>
     <div class="jobhead">
       <div class="issue"></div>
       <h2 class="store"></h2>
@@ -87,7 +92,8 @@
         <strong>前回の通話の続きがあります。</strong> 記録済みの項目は聞き直しません。
         <button class="btn ghost small discard">下書きを破棄</button>
       </div>
-      <div class="row">
+      <div class="micwarn hidden"></div>
+      <div class="row startrow">
         <label>会話の言語
           <select class="lang"><option value="ja">日本語</option><option value="vi">Tiếng Việt（デモ用・記録は日本語）</option></select>
         </label>
@@ -103,17 +109,23 @@
         <span class="spacer"></span>
         <span class="timer">0:00</span>
         <span class="cost" title="推定コスト（参考値）">$0.000</span>
-        <button class="btn ghost small mute">🔇 ミュート</button>
-        <button class="btn danger small stop">終了</button>
+        <span class="break"></span>
+        <button type="button" class="btn ghost small mute">🔇 ミュート</button>
+        <button type="button" class="btn danger small stop">終了</button>
       </div>
       <form class="typebox">
-        <input type="text" placeholder="うるさい場所ではここに入力して送信できます" autocomplete="off">
+        <input type="text" placeholder="うるさい場所ではここに入力して送信" autocomplete="off" enterkeyhint="send">
         <button class="btn small">送信</button>
       </form>
     </div>
 
     <div class="done hidden card ok"></div>
 
+    <!-- phone only: one of the two cards at a time -->
+    <div class="panetabs" role="tablist">
+      <button type="button" class="panetab" data-show="transcript">会話</button>
+      <button type="button" class="panetab" data-show="checklist">報告書 <span class="pt-count"></span></button>
+    </div>
     <div class="grid2">
       <section class="card transcript-card">
         <h3>会話 <small>Hội thoại</small></h3>

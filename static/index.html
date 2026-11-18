@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>作業報告アシスタント</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">🎙</span>
+      <div>
+        <div class="title">作業報告アシスタント <span class="demo">DEMO</span></div>
+        <div class="sub">QNavi Approve Helper × Gemini Live</div>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-view="worker">作業者<small>Thợ</small></button>
+      <button class="tab" data-view="approver">承認者<small>Người duyệt</small></button>
+      <button class="tab" data-view="rules">ルール<small>Rule</small></button>
+    </nav>
+    <div class="model" id="modelBadge"></div>
+  </header>
+
+  <!-- ============================ WORKER ============================ -->
+  <main id="view-worker" class="view">
+    <aside class="joblist">
+      <h2>担当案件 <small>Job được giao</small></h2>
+      <div id="jobs"></div>
+    </aside>
+
+    <section class="jobpane" id="jobPane">
+      <div class="empty">左の一覧から案件を選んでください。</div>
+    </section>
+  </main>
+
+  <!-- ============================ APPROVER ========================== -->
+  <main id="view-approver" class="view hidden">
+    <aside class="joblist">
+      <h2>受付済み報告 <small>Báo cáo đã nhận</small></h2>
+      <div id="reports"></div>
+    </aside>
+    <section class="jobpane" id="reportPane">
+      <div class="empty">報告を選んでください。</div>
+    </section>
+  </main>
+
+  <!-- ============================ RULES ============================= -->
+  <main id="view-rules" class="view single hidden">
+    <section class="card">
+      <div class="row between">
+        <div>
+          <h2>報告ルール <small id="rulesMeta"></small></h2>
+          <p class="muted">ルールの編集は <code id="rulesPath"></code> を直接編集し、「再読み込み」を押してください（サーバー再起動は不要）。<br>
+            <span class="vi">Sửa file YAML rồi bấm "再読み込み". Nếu file lỗi, server giữ nguyên bản cũ và báo lỗi.</span></p>
+        </div>
+        <button class="btn" id="reloadRules">ルール再読み込み</button>
+      </div>
+      <div id="reloadMsg"></div>
+    </section>
+    <section class="card">
+      <h3>Gemini に渡す指示文 <small>System instruction thực tế gửi cho Gemini</small></h3>
+      <div class="row">
+        <select id="promptJob"></select>
+        <select id="promptLang"><option value="ja">日本語</option><option value="vi">Tiếng Việt (demo)</option></select>
+        <button class="btn ghost" id="showPrompt">表示</button>
+      </div>
+      <pre class="code" id="promptText">案件を選んで「表示」を押してください。</pre>
+    </section>
+    <section class="card">
+      <h3>ルールファイル (YAML)</h3>
+      <pre class="code" id="rulesYaml"></pre>
+    </section>
+  </main>
+
+  <template id="tpl-call">
+    <div class="jobhead">
+      <div class="issue"></div>
+      <h2 class="store"></h2>
+      <div class="meta"></div>
+      <blockquote class="desc"></blockquote>
+    </div>
+
+    <div class="precall card">
+      <div class="resume hidden">
+        <strong>前回の通話の続きがあります。</strong> 記録済みの項目は聞き直しません。
+        <button class="btn ghost small discard">下書きを破棄</button>
+      </div>
+      <div class="row">
+        <label>会話の言語
+          <select class="lang"><option value="ja">日本語</option><option value="vi">Tiếng Việt（デモ用・記録は日本語）</option></select>
+        </label>
+        <button class="btn primary big start">🎙 報告を開始</button>
+      </div>
+      <p class="muted small">マイクを使います。周囲がうるさい場合はイヤホン推奨。通話は最長 <span class="maxmin"></span> 分です。</p>
+    </div>
+
+    <div class="incall hidden">
+      <div class="callbar">
+        <span class="dot"></span><span class="status">接続中…</span>
+        <span class="meter"><span></span></span>
+        <span class="spacer"></span>
+        <span class="timer">0:00</span>
+        <span class="cost" title="推定コスト（参考値）">$0.000</span>
+        <button class="btn ghost small mute">🔇 ミュート</button>
+        <button class="btn danger small stop">終了</button>
+      </div>
+      <form class="typebox">
+        <input type="text" placeholder="うるさい場所ではここに入力して送信できます" autocomplete="off">
+        <button class="btn small">送信</button>
+      </form>
+    </div>
+
+    <div class="done hidden card ok"></div>
+
+    <div class="grid2">
+      <section class="card transcript-card">
+        <h3>会話 <small>Hội thoại</small></h3>
+        <div class="transcript"><div class="muted small">通話を開始すると会話がここに表示されます。</div></div>
+      </section>
+      <section class="card checklist-card">
+        <div class="row between">
+          <h3>報告書 <small>Checklist theo rule</small></h3>
+          <span class="progress-text"></span>
+        </div>
+        <div class="progress"><span></span></div>
+        <ul class="checklist"></ul>
+        <h4>費用項目</h4>
+        <div class="costs"></div>
+      </section>
+    </div>
+  </template>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+{
+  "_note": "Dữ liệu GIẢ cho demo. Mô phỏng cấu trúc một trouble của QNavi (description + group_large/group_small). Tên cửa hàng, người đều là hư cấu.",
+  "jobs": [
+    {
+      "job_id": "J-1001",
+      "trouble_number": "TR-2026-11-0001",
+      "store_name": "サンプル食堂 新宿南口店",
+      "large": "エアコン",
+      "small": "冷えない",
+      "description": "店内（客席側）のエアコンが冷えません。風は出ていますがぬるい風です。リモコンに何か表示が出ていた気がします。ランチ前までに対応をお願いします。",
+      "requested_at": "2026-11-15T09:12:00+09:00",
+      "visit_date": "2026-11-17",
+      "worker": {"id": "W-01", "name": "山田"}
+    },
+    {
+      "job_id": "J-1002",
+      "trouble_number": "TR-2026-11-0002",
+      "store_name": "サンプルうどん 池袋東口店",
+      "large": "水回り",
+      "small": "つまり：シンク・その他",
+      "description": "厨房の洗い場シンクの排水が流れず、水が溜まったままになっています。",
+      "requested_at": "2026-11-16T14:40:00+09:00",
+      "visit_date": "2026-11-17",
+      "worker": {"id": "W-01", "name": "山田"}
+    },
+    {
+      "job_id": "J-1003",
+      "trouble_number": "TR-2026-11-0003",
+      "store_name": "サンプルカフェ 横浜西口店",
+      "large": "ガラス",
+      "small": "割れている",
+      "description": "入口横の窓ガラスにひびが入っています。朝出勤したら割れていました。夜間に何か当たったのかもしれません。",
+      "requested_at": "2026-11-16T08:05:00+09:00",
+      "visit_date": "2026-11-17",
+      "worker": {"id": "W-02", "name": "佐々木"}
+    },
+    {
+      "job_id": "J-1004",
+      "trouble_number": "TR-2026-11-0004",
+      "store_name": "サンプル焼肉 渋谷道玄坂店",
+      "large": "電気",
+      "small": "電気がつかない",
+      "description": "客席奥の照明が3か所つきません。電球を替えてもつきませんでした。",
+      "requested_at": "2026-11-14T17:30:00+09:00",
+      "visit_date": "2026-11-16",
+      "worker": {"id": "W-02", "name": "佐々木"}
+    },
+    {
+      "job_id": "J-1005",
+      "trouble_number": "TR-2026-11-0005",
+      "store_name": "サンプルマート 品川駅前店",
+      "large": "冷蔵",
+      "small": "冷えない",
+      "description": "飲料の冷蔵ショーケースの温度が上がっています。表示は10℃くらいです。",
+      "requested_at": "2026-11-16T11:20:00+09:00",
+      "visit_date": "2026-11-17",
+      "worker": {"id": "W-03", "name": "高橋"}
+    }
+  ]
+}

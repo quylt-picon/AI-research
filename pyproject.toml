@@ -1,0 +1,19 @@
+[project]
+name = "worker-report-live"
+version = "0.1.0"
+description = "Demo: Gemini Live voice agent that takes a repair worker's report by rules (QNavi Approve Helper)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "google-genai>=1.0",
+    "pyyaml>=6.0",
+    "pydantic-settings>=2.4",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "httpx>=0.27"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
